@@ -18,7 +18,7 @@ metadata:
     lastModified: "August 1st, 2019"
   labels: 
     application: aquasec
-    createdBy: BryanKMorrow
+    createdBy: BryanKMorrow, vAndrucha77
   name: aqua-security
 objects: 
   -
