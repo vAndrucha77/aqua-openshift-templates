@@ -15,7 +15,7 @@ metadata:
     openshift.io/support-url: "https://support.aquasec.com"
     tenplate.openshift.io/expose-uri: "http://{.spec.host}{.spec.path}"
     tags: integration,aqua
-    lastModified: "July 30th, 2019"
+    lastModified: "August 1st, 2019"
   labels: 
     application: aquasec
     createdBy: BryanKMorrow
@@ -41,7 +41,7 @@ objects:
     spec:
       storageClassName: local-storage
       capacity:
-        storage: 5Gi
+        storage: 30Gi
       accessModes:
         - ReadWriteMany
       persistentVolumeReclaimPolicy: Recycle
@@ -59,7 +59,7 @@ objects:
         - ReadWriteMany
       resources:
         requests:
-          storage: 3Gi
+          storage: 30Gi
       volumeName: aquadb-pv
       selector:
         matchLabels:
@@ -78,7 +78,7 @@ objects:
           targetPort: 3622
       selector:
         app: aqua-gateway
-      type: LoadBalancer
+      type: ClusterIP
   -
     apiVersion: extensions/v1beta1
     kind: Deployment
@@ -102,6 +102,8 @@ objects:
             env:
               - name: SCALOCK_GATEWAY_PUBLIC_IP
                 value: aqua-gateway
+              - name: AQUA_CONSOLE_SECURE_ADDRESS
+                value: aqua-web-ssl-gprc:443
               - name: SCALOCK_DBUSER
                 value: "postgres"
               - name: SCALOCK_DBPASSWORD
@@ -230,7 +232,9 @@ objects:
       host: ${ROUTER}
       to:
         kind: Service
-        name: aqua-web
+        name: aqua-web-ssl-gprc
+      tls:
+        termination: passthrough
   -
     apiVersion: v1
     kind: Service
@@ -251,7 +255,7 @@ objects:
     apiVersion: v1
     kind: Service
     metadata:
-      name: aqua-grpc
+      name: aqua-web-ssl-gprc
       labels:
         app: aqua-web
     spec:
@@ -259,6 +263,7 @@ objects:
         - port: 443
           protocol: TCP
           targetPort: 8443
+          name: aqua-web-ssl-gprc
       selector:
         app: aqua-web
       type: ClusterIP
@@ -343,7 +348,7 @@ parameters:
     displayName: AQUA_REGISTRY
     name: AQUA_REGISTRY
     required: true
-    value: "AQUA_REGISTRY"
+    value: "PROVIDE_AQUA_REGISTRY"
   -
     description: "Enter the image tag for the Aqua images."
     displayName: AQUA_TAG
