@@ -26,7 +26,6 @@ objects:
     kind: Secret
     metadata:
       name: postgres-password
-      namespace: aqua-security
     type: Opaque
     stringData:
       password: "${DB_PASSWORD}"
@@ -35,7 +34,6 @@ objects:
     kind: PersistentVolume
     metadata:
       name: aquadb-pv
-      namespace: aqua-security
       labels:
         app: aqua-security
     spec:
@@ -52,7 +50,6 @@ objects:
     apiVersion: v1
     metadata:
       name: aquadb-pvc
-      namespace: aqua-security
     spec:
       storageClassName: local-storage
       accessModes:
@@ -222,7 +219,6 @@ objects:
     subjects:
       - kind: ServiceAccount
         name: aqua
-        namespace: aqua-security
   -
     apiVersion: v1
     kind: Route
