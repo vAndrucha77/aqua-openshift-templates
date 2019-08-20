@@ -219,18 +219,7 @@ objects:
     subjects:
       - kind: ServiceAccount
         name: aqua
-  -
-    apiVersion: v1
-    kind: Route
-    metadata:
-      name: aqua-gateway
-    spec:
-      host: ${ROUTER}
-      to:
-        kind: Service
-        name: aqua-web-ssl-gprc
-      tls:
-        termination: passthrough
+        namespace: ${NAMESPACE}
   -
     apiVersion: v1
     kind: Route
@@ -345,6 +334,11 @@ objects:
               hostPath:
                 path: /var/run/docker.sock
 parameters: 
+  - description: "Current Namespace (needed for rolebinding)"
+    displayName: NAMESPACE
+    name: NAMESPACE
+    required: true
+    value: "aqua-security"
   -
     description: "Enter the database password for Aqua Security"
     displayName: DB_PASSWORD
