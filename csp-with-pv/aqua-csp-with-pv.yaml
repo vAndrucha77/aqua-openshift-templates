@@ -227,12 +227,24 @@ objects:
     apiVersion: v1
     kind: Route
     metadata:
-      name: aqua-web
+      name: aqua-gateway
     spec:
       host: ${ROUTER}
       to:
         kind: Service
         name: aqua-web-ssl-gprc
+      tls:
+        termination: passthrough
+  -
+    apiVersion: v1
+    kind: Route
+    metadata:
+      name: aqua-web
+    spec:
+      host: ${ROUTER}
+      to:
+        kind: Service
+        name: aqua-web
       tls:
         termination: passthrough
   -
