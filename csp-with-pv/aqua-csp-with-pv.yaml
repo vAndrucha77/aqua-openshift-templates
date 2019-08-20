@@ -100,7 +100,7 @@ objects:
               - name: SCALOCK_GATEWAY_PUBLIC_IP
                 value: aqua-gateway
               - name: AQUA_CONSOLE_SECURE_ADDRESS
-                value: aqua-web-ssl-gprc:443
+                value: aqua-web-ssl-grpc:443
               - name: SCALOCK_DBUSER
                 value: "postgres"
               - name: SCALOCK_DBPASSWORD
@@ -252,7 +252,7 @@ objects:
     apiVersion: v1
     kind: Service
     metadata:
-      name: aqua-web-ssl-gprc
+      name: aqua-web-ssl-grpc
       labels:
         app: aqua-web
     spec:
@@ -260,7 +260,7 @@ objects:
         - port: 443
           protocol: TCP
           targetPort: 8443
-          name: aqua-web-ssl-gprc
+          name: aqua-web-ssl-grpc
       selector:
         app: aqua-web
       type: ClusterIP
