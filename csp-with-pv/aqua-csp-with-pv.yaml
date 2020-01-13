@@ -1,5 +1,5 @@
 --- 
-apiVersion: v1
+apiVersion: template.openshift.io/v1
 kind: Template
 labels: 
   app: aqua-security
@@ -15,7 +15,7 @@ metadata:
     openshift.io/support-url: "https://support.aquasec.com"
     tenplate.openshift.io/expose-uri: "http://{.spec.host}{.spec.path}"
     tags: integration,aqua
-    lastModified: "August 1st, 2019"
+    lastModified: "January 13th, 2020"
   labels: 
     application: aquasec
     createdBy: BryanKMorrow
@@ -65,7 +65,7 @@ objects:
     apiVersion: v1
     kind: Service
     metadata:
-      name: aqua-gateway
+      name: aqua-gateway-ssh
       labels:
         app: aqua-gateway
     spec:
@@ -73,6 +73,21 @@ objects:
         - port: 3622
           protocol: TCP
           targetPort: 3622
+      selector:
+        app: aqua-gateway
+      type: ClusterIP
+  -
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: aqua-gateway-ssl
+      labels:
+        app: aqua-gateway
+    spec:
+      ports:
+        - port: 8443
+          protocol: TCP
+          targetPort: 8443
       selector:
         app: aqua-gateway
       type: ClusterIP
@@ -127,8 +142,6 @@ objects:
                 value: aqua-db
               - name: SCALOCK_AUDIT_DBPORT
                 value: "5432"
-            ports:
-            - containerPort: 3622
             readinessProbe:
               failureThreshold: 3
               initialDelaySeconds: 10
@@ -179,8 +192,6 @@ objects:
             volumeMounts:
               - mountPath: /var/lib/postgresql/data
                 name: aquadb-data-mount
-            ports:
-            - containerPort: 5432
             readinessProbe:
               failureThreshold: 3
               initialDelaySeconds: 10
@@ -193,6 +204,33 @@ objects:
             - name: aquadb-data-mount
               persistentVolumeClaim:
                 claimName: aquadb-pvc
+  -
+    kind: ClusterRole
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: aqua-discovery-cr
+      labels:
+        rbac.example.com/aggregate-to-monitoring: "true"
+    rules:
+    - apiGroups: [""]
+      resources: ["nodes", "services", "endpoints", "pods", "deployments", "namespaces","componentstatuses"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["rbac.authorization.k8s.io"]
+      resources: ["*"]
+      verbs: ["get", "list", "watch"]
+  -
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: aqua-discovery-crb
+      roleRef:
+        name: aqua-discovery-cr
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+      subjects:
+        - kind: ServiceAccount
+          name: aqua
+          namespace: ${NAMESPACE}
   -
     apiVersion: v1
     kind: ClusterRole
@@ -218,7 +256,7 @@ objects:
       name: image-scanner
     subjects:
       - kind: ServiceAccount
-        name: aqua
+        name: ${SERVICE_ACCOUNT}
         namespace: ${NAMESPACE}
   -
     apiVersion: v1
@@ -231,7 +269,8 @@ objects:
         kind: Service
         name: aqua-web
       tls:
-        termination: passthrough
+        termination: edge
+        insecureEdgeTerminationPolicy: Allow
   -
     apiVersion: v1
     kind: Service
@@ -318,8 +357,6 @@ objects:
             volumeMounts:
               - mountPath: /var/run/docker.sock
                 name: docker-socket-mount
-            ports:
-            - containerPort: 8080
             readinessProbe:
               failureThreshold: 3
               httpGet:
