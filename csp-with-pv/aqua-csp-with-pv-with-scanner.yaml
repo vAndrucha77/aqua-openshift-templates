@@ -22,6 +22,60 @@ metadata:
   name: aqua-security
 objects: 
   -
+    kind: ClusterRole
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: aqua-discovery-cr
+      labels:
+        rbac.example.com/aggregate-to-monitoring: "true"
+    rules:
+    - apiGroups: [""]
+      resources: ["nodes", "services", "endpoints", "pods", "deployments", "namespaces","componentstatuses"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["rbac.authorization.k8s.io"]
+      resources: ["*"]
+      verbs: ["get", "list", "watch"]
+  -
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: aqua-discovery-crb
+      roleRef:
+        name: aqua-discovery-cr
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+      subjects:
+        - kind: ServiceAccount
+          name: aqua
+          namespace: ${NAMESPACE}
+  -
+    apiVersion: v1
+    kind: ClusterRole
+    metadata:
+      annotations:
+        openshift.io/description: A user who can search and scan images from an OpenShift integrated registry.
+      name: image-scanner
+    rules:
+    - apiGroups:
+      resources:
+      - imagestreams
+      - imagestreams/layers
+      verbs:
+      - get
+      - list
+      - watch
+  -
+    apiVersion: v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: aqua-scanner-binding
+    roleRef:
+      name: image-scanner
+    subjects:
+      - kind: ServiceAccount
+        name: ${SERVICE_ACCOUNT}
+        namespace: ${NAMESPACE}
+  -
     apiVersion: v1
     kind: Secret
     metadata:
@@ -29,6 +83,14 @@ objects:
     type: Opaque
     stringData:
       password: "${DB_PASSWORD}"
+  -
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: aqua-password
+    type: Opaque
+    stringData:
+      password: "${AQUA_PASSWORD}"
   -
     apiVersion: v1
     kind: PersistentVolume
@@ -205,60 +267,6 @@ objects:
               persistentVolumeClaim:
                 claimName: aquadb-pvc
   -
-    kind: ClusterRole
-    apiVersion: rbac.authorization.k8s.io/v1
-    metadata:
-      name: aqua-discovery-cr
-      labels:
-        rbac.example.com/aggregate-to-monitoring: "true"
-    rules:
-    - apiGroups: [""]
-      resources: ["nodes", "services", "endpoints", "pods", "deployments", "namespaces","componentstatuses"]
-      verbs: ["get", "list", "watch"]
-    - apiGroups: ["rbac.authorization.k8s.io"]
-      resources: ["*"]
-      verbs: ["get", "list", "watch"]
-  -
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: aqua-discovery-crb
-      roleRef:
-        name: aqua-discovery-cr
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-      subjects:
-        - kind: ServiceAccount
-          name: aqua
-          namespace: ${NAMESPACE}
-  -
-    apiVersion: v1
-    kind: ClusterRole
-    metadata:
-      annotations:
-        openshift.io/description: A user who can search and scan images from an OpenShift integrated registry.
-      name: image-scanner
-    rules:
-    - apiGroups:
-      resources:
-      - imagestreams
-      - imagestreams/layers
-      verbs:
-      - get
-      - list
-      - watch
-  -
-    apiVersion: v1
-    kind: ClusterRoleBinding
-    metadata:
-      name: aqua-scanner-binding
-    roleRef:
-      name: image-scanner
-    subjects:
-      - kind: ServiceAccount
-        name: ${SERVICE_ACCOUNT}
-        namespace: ${NAMESPACE}
-  -
     apiVersion: v1
     kind: Route
     metadata:
@@ -324,6 +332,11 @@ objects:
             securityContext:
               privileged: true
             env:
+              - name: ADMIN_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: password
+                    name: aqua-password
               - name: SCALOCK_DBUSER
                 value: "postgres"
               - name: SCALOCK_DBPASSWORD
@@ -370,6 +383,62 @@ objects:
             - name: docker-socket-mount
               hostPath:
                 path: /var/run/docker.sock
+  -
+    apiVersion: extensions/v1beta1
+    kind: Deployment
+    metadata:
+      name: aqua-scanner
+    spec:
+      replicas: ${SCANNER_COUNT}
+      template:
+        metadata:
+          labels:
+            app: aqua-scanner
+          name: aqua-scanner
+        spec:
+          serviceAccount: ${SERVICE_ACCOUNT}
+          imagePullSecrets:
+            - name: aqua-registry
+          containers:
+            - name: aqua-scanner
+              image: ${AQUA_REGISTRY}/scanner:${AQUA_TAG}
+              env:
+                - name: SCANNER_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: aqua-password
+              securityContext:
+                privileged: true
+              ports:
+                - containerPort: 8080
+                  protocol: TCP
+              imagePullPolicy: IfNotPresent
+              terminationMessagePolicy: File
+              volumeMounts:
+                - mountPath: /var/run/docker.sock
+                  name: docker-socket-mount
+              args:
+                - daemon
+                - '--user'
+                - administrator
+                - '--password'
+                - ${AQUA_PASSWORD}
+                - '--host'
+                - 'http://aqua-web:8080'
+          volumes:
+            - name: docker-socket-mount
+              hostPath:
+                path: /var/run/docker.sock
+                type: ''
+          dnsPolicy: ClusterFirst
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 25%
+          maxSurge: 25%
+      revisionHistoryLimit: 10
+      progressDeadlineSeconds: 600
 parameters: 
   - description: "Current Namespace (needed for rolebinding)"
     displayName: NAMESPACE
@@ -382,6 +451,24 @@ parameters:
     name: DB_PASSWORD
     required: true
     value: "password"
+  -
+    description: "Enter the administrator password for Aqua Security"
+    displayName: AQUA_PASSWORD
+    name: AQUA_PASSWORD
+    required: true
+    value: "password"
+  -
+    description: "Set the value of this variable to \"require\" to strictly require an SSL encrypted connection to the Postgres configuration database."
+    displayName: SCALOCK_DBSSL
+    name: SCALOCK_DBSSL
+    required: false
+    value: 
+  -
+    description: "Set the value of this variable to \"require\" to strictly require an SSL encrypted connection to the Postgres audit database."
+    displayName: SCALOCK_AUDIT_DBSSL
+    name: SCALOCK_AUDIT_DBSSL
+    required: false
+    value: 
   -
     description: "Enter the registry for the Aqua images."
     displayName: AQUA_REGISTRY
@@ -416,5 +503,11 @@ parameters:
     description: "Gateway communication uses GRPC (1 is enabled)"
     displayName: AQUA_GRPC_MODE
     name: GRPC
+    required: true
+    value: "1"
+  -
+    description: "Number of Scanners to deploy"
+    displayName: AQUA_SCANNER_COUNT
+    name: SCANNER_COUNT
     required: true
     value: "1"
