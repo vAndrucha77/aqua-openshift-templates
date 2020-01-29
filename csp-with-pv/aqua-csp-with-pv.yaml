@@ -15,7 +15,7 @@
       openshift.io/support-url: "https://support.aquasec.com"
       tenplate.openshift.io/expose-uri: "http://{.spec.host}{.spec.path}"
       tags: integration,aqua
-      lastModified: "January 29th, 2020"
+      lastModified: "January 30th, 2020"
     labels: 
       application: aquasec
       createdBy: Aqua-SA-Team
@@ -338,13 +338,13 @@
                 hostPath:
                   path: /var/run/docker.sock
   parameters: 
-    - description: "Current Namespace (needed for rolebinding)"
+    - description: "Current Namespace (needed for rolebinding)."
       displayName: NAMESPACE
       name: NAMESPACE
       required: true
       value: "aqua"
     -
-      description: "Enter the database password for Aqua Security"
+      description: "The database password will be generated automatically. Provide the password manually if needed."
       displayName: DB_PASSWORD
       name: DB_PASSWORD
       required: true
@@ -363,25 +363,25 @@
       required: true
       value: "4.6"
     - 
-      description: "Enter the service account"
+      description: "Enter the service account name."
       displayName: SERVICE_ACCOUNT
       name: SERVICE_ACCOUNT
       required: true
       value: "aqua-sa"
     - 
-      description: "Enter the storageClassName type for PVC, e.g. gp2 for AWS EBS"
+      description: "Enter the storageClassName type for PVC, e.g. gp2 for AWS EBS."
       displayName: SERVICE_PVC_STORAGECLASS
       name: SERVICE_PVC_STORAGECLASS
       required: true
       value: "gp2"
     - 
-      description: "Enter the storage access modes for PVC"
+      description: "Enter the storage access modes for PVC."
       displayName: SERVICE_PVC_STORAGEACCESS
       name: SERVICE_PVC_STORAGEACCESS
       required: true
       value: "ReadWriteOnce"
     - 
-      description: "Enter the storage size for PVC"
+      description: "Enter the storage size for PVC."
       displayName: SERVICE_PVC_STORAGESIZE
       name: SERVICE_PVC_STORAGESIZE
       required: true
@@ -405,13 +405,13 @@
       required: false
       value: 
     -
-      description: "Dockerless Scanning (1 is enabled)"
+      description: "Dockerless Scanning (1 is enabled)."
       displayName: DOCKERLESS_SCANNING
       name: DOCKERLESS
       required: true
       value: "1"
     -
-      description: "Gateway communication uses GRPC (1 is enabled)"
+      description: "Gateway communication uses GRPC (1 is enabled)."
       displayName: AQUA_GRPC_MODE
       name: GRPC
       required: true
