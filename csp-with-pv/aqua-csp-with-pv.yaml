@@ -1,420 +1,379 @@
 --- 
-apiVersion: template.openshift.io/v1
-kind: Template
-labels: 
-  app: aqua-security
-  template: aqua-security-template
-message: "The following service(s) have been created in your project, Aqua Web Console, Database and Aqua Gateway"
-metadata: 
-  annotations: 
-    description: "Template to deploy Aqua Web Console, Aqua Gateway and Database"
-    openshift.io/display-name: "Aqua Security CSP"
-    openshift.io/documentation-url: "https://docs.aquasec.com"
-    openshift.io/long-description: "This template creates objects that deploy the Aqua Security CSP."
-    openshift.io/provider-display-name: "Aqua Security"
-    openshift.io/support-url: "https://support.aquasec.com"
-    tenplate.openshift.io/expose-uri: "http://{.spec.host}{.spec.path}"
-    tags: integration,aqua
-    lastModified: "January 13th, 2020"
+  apiVersion: template.openshift.io/v1
+  kind: Template
   labels: 
-    application: aquasec
-    createdBy: BryanKMorrow
-  name: aqua-security
-objects: 
-  -
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: postgres-password
-    type: Opaque
-    stringData:
-      password: "${DB_PASSWORD}"
-  -
-    apiVersion: v1
-    kind: PersistentVolume
-    metadata:
-      name: aquadb-pv
-      labels:
-        app: aqua-security
-    spec:
-      storageClassName: local-storage
-      capacity:
-        storage: 30Gi
-      accessModes:
-        - ReadWriteMany
-      persistentVolumeReclaimPolicy: Recycle
-      hostPath:
-        path: "/var/lib/aquadata/"
-  -
-    kind: PersistentVolumeClaim
-    apiVersion: v1
-    metadata:
-      name: aquadb-pvc
-    spec:
-      storageClassName: local-storage
-      accessModes:
-        - ReadWriteMany
-      resources:
-        requests:
-          storage: 30Gi
-      volumeName: aquadb-pv
-      selector:
-        matchLabels:
-          app: aqua-security
-  -
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: aqua-gateway-ssh
-      labels:
-        app: aqua-gateway
-    spec:
-      ports:
-        - port: 3622
-          protocol: TCP
-          targetPort: 3622
-      selector:
-        app: aqua-gateway
-      type: ClusterIP
-  -
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: aqua-gateway-ssl
-      labels:
-        app: aqua-gateway
-    spec:
-      ports:
-        - port: 8443
-          protocol: TCP
-          targetPort: 8443
-      selector:
-        app: aqua-gateway
-      type: ClusterIP
-  -
-    apiVersion: extensions/v1beta1
-    kind: Deployment
-    metadata:
-      name: aqua-gateway
-    spec:
-      template:
-        metadata:
-          labels:
-            app: aqua-gateway
-          name: aqua-gateway
-        spec:
-          serviceAccount: ${SERVICE_ACCOUNT}
-          imagePullSecrets:
-            - name: aqua-registry
-          containers:
-          - name: aqua-gateway
-            image: ${AQUA_REGISTRY}/gateway:${AQUA_TAG}
-            securityContext:
-              privileged: true
-            env:
-              - name: SCALOCK_GATEWAY_PUBLIC_IP
-                value: aqua-gateway
-              - name: AQUA_CONSOLE_SECURE_ADDRESS
-                value: aqua-web-ssl-grpc:443
-              - name: SCALOCK_DBUSER
-                value: "postgres"
-              - name: SCALOCK_DBPASSWORD
-                valueFrom:
-                  secretKeyRef:
-                    key: password
-                    name: postgres-password
-              - name: SCALOCK_DBNAME
-                value: "scalock"
-              - name: SCALOCK_DBHOST
-                value: aqua-db
-              - name: SCALOCK_DBPORT
-                value: "5432"
-              - name: SCALOCK_AUDIT_DBUSER
-                value: "postgres"
-              - name: SCALOCK_AUDIT_DBPASSWORD
-                valueFrom:
-                  secretKeyRef:
-                    key: password
-                    name: postgres-password
-              - name: SCALOCK_AUDIT_DBNAME
-                value: "slk_audit"
-              - name: SCALOCK_AUDIT_DBHOST
-                value: aqua-db
-              - name: SCALOCK_AUDIT_DBPORT
-                value: "5432"
-            readinessProbe:
-              failureThreshold: 3
-              initialDelaySeconds: 10
-              periodSeconds: 30
-              successThreshold: 1
-              tcpSocket:
-                port: 3622
-              timeoutSeconds: 1
-  -
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: aqua-db
-      labels:
-        app: aqua-db
-    spec:
-      ports:
-        - port: 5432
-      selector:
-        app: aqua-db
-      type: ClusterIP
-  -
-    apiVersion: extensions/v1beta1
-    kind: Deployment
-    metadata:
-      name: aqua-db
-    spec:
-      template:
-        metadata:
-          labels:
-            app: aqua-db
-          name: aqua-db
-        spec:
-          serviceAccount: ${SERVICE_ACCOUNT}
-          imagePullSecrets:
-            - name: aqua-registry
-          containers:
-          - name: aqua-db
-            image: ${AQUA_REGISTRY}/database:${AQUA_TAG}
-            securityContext:
-              privileged: true
-            env:
-              - name: postgres-password
-                valueFrom:
-                  secretKeyRef:
-                    key: password
-                    name: postgres-password
-            volumeMounts:
-              - mountPath: /var/lib/postgresql/data
-                name: aquadb-data-mount
-            readinessProbe:
-              failureThreshold: 3
-              initialDelaySeconds: 10
-              periodSeconds: 20
-              successThreshold: 1
-              tcpSocket:
-                port: 5432
-              timeoutSeconds: 1
-          volumes:
-            - name: aquadb-data-mount
-              persistentVolumeClaim:
-                claimName: aquadb-pvc
-  -
-    kind: ClusterRole
-    apiVersion: rbac.authorization.k8s.io/v1
-    metadata:
-      name: aqua-discovery-cr
-      labels:
-        rbac.example.com/aggregate-to-monitoring: "true"
-    rules:
-    - apiGroups: [""]
-      resources: ["nodes", "services", "endpoints", "pods", "deployments", "namespaces","componentstatuses"]
-      verbs: ["get", "list", "watch"]
-    - apiGroups: ["rbac.authorization.k8s.io"]
-      resources: ["*"]
-      verbs: ["get", "list", "watch"]
-  -
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
+    app: aqua-security
+    template: aqua-security-template
+  message: "The following service(s) have been created in your project, Aqua Web Console, Database and Aqua Gateway"
+  metadata: 
+    annotations: 
+      description: "Template to deploy Aqua Web Console, Aqua Gateway and Database"
+      openshift.io/display-name: "Aqua Security CSP"
+      openshift.io/documentation-url: "https://docs.aquasec.com"
+      openshift.io/long-description: "This template creates objects that deploy the Aqua Security CSP."
+      openshift.io/provider-display-name: "Aqua Security"
+      openshift.io/support-url: "https://support.aquasec.com"
+      tenplate.openshift.io/expose-uri: "http://{.spec.host}{.spec.path}"
+      tags: integration,aqua
+      lastModified: "January 29th, 2020"
+    labels: 
+      application: aquasec
+      createdBy: BryanKMorrow
+    name: aqua-security
+  objects: 
+    -
+      apiVersion: v1
+      kind: Secret
       metadata:
-        name: aqua-discovery-crb
-      roleRef:
-        name: aqua-discovery-cr
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-      subjects:
-        - kind: ServiceAccount
-          name: aqua
-          namespace: ${NAMESPACE}
-  -
-    apiVersion: v1
-    kind: ClusterRole
-    metadata:
-      annotations:
-        openshift.io/description: A user who can search and scan images from an OpenShift integrated registry.
-      name: image-scanner
-    rules:
-    - apiGroups:
-      resources:
-      - imagestreams
-      - imagestreams/layers
-      verbs:
-      - get
-      - list
-      - watch
-  -
-    apiVersion: v1
-    kind: ClusterRoleBinding
-    metadata:
-      name: aqua-scanner-binding
-    roleRef:
-      name: image-scanner
-    subjects:
-      - kind: ServiceAccount
-        name: ${SERVICE_ACCOUNT}
-        namespace: ${NAMESPACE}
-  -
-    apiVersion: v1
-    kind: Route
-    metadata:
-      name: aqua-web
-    spec:
-      host: ${ROUTER}
-      to:
-        kind: Service
+        name: postgres-password
+      type: Opaque
+      stringData:
+        password: "${DB_PASSWORD}"
+    -
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: aqua-license
+      type: Opaque
+      stringData:
+        license: "${AQUA_LICENSE}"
+    -
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: aqua-admin-password
+      type: Opaque
+      stringData:
+        password: "${AQUA_ADMIN_PASSWORD}"
+    -
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: aqua-gateway
+        labels:
+          app: aqua-gateway
+      spec:
+        ports:
+          - port: 8443
+            protocol: TCP
+            targetPort: 8443
+            name: aqua-gate-ssl
+          - port: 3622
+            protocol: TCP
+            targetPort: 3622
+            name: aqua-gate
+        selector:
+          app: aqua-gateway
+        type: ClusterIP
+    -
+      apiVersion: extensions/v1beta1
+      kind: Deployment
+      metadata:
+        labels:
+          app: aqua-gateway
+        name: aqua-gateway
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: aqua-gateway
+        template:
+          metadata:
+            labels:
+              app: aqua-gateway
+            name: aqua-gateway
+          spec:
+            serviceAccount: ${SERVICE_ACCOUNT}
+            restartPolicy: Always
+            imagePullSecrets:
+              - name: aqua-registry
+            containers:
+            - name: aqua-gateway
+              image: ${AQUA_REGISTRY}/gateway:${AQUA_TAG}
+              securityContext:
+                privileged: true
+              env:
+                - name: SCALOCK_GATEWAY_PUBLIC_IP
+                  value: aqua-gateway
+                - name: AQUA_CONSOLE_SECURE_ADDRESS
+                  value: aqua-web:443
+                - name: SCALOCK_DBUSER
+                  value: "postgres"
+                - name: SCALOCK_DBPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: postgres-password
+                - name: SCALOCK_DBNAME
+                  value: "scalock"
+                - name: SCALOCK_DBHOST
+                  value: aqua-db
+                - name: SCALOCK_DBPORT
+                  value: "5432"
+                - name: SCALOCK_AUDIT_DBUSER
+                  value: "postgres"
+                - name: SCALOCK_AUDIT_DBPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: postgres-password
+                - name: SCALOCK_AUDIT_DBNAME
+                  value: "slk_audit"
+                - name: SCALOCK_AUDIT_DBHOST
+                  value: aqua-db
+                - name: SCALOCK_AUDIT_DBPORT
+                  value: "5432"
+              ports:
+                - containerPort: 3622
+                  protocol: TCP
+                - containerPort: 8443
+                  protocol: TCP
+              readinessProbe:
+                failureThreshold: 3
+                initialDelaySeconds: 10
+                periodSeconds: 30
+                successThreshold: 1
+                tcpSocket:
+                  port: 3622
+                timeoutSeconds: 1
+    -
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: aqua-db
+        labels:
+          app: aqua-db
+      spec:
+        ports:
+          - port: 5432
+        selector:
+          app: aqua-db
+        type: ClusterIP
+    -
+      apiVersion: extensions/v1beta1
+      kind: Deployment
+      metadata:
+        name: aqua-db
+        labels:
+          app: aqua-db
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: aqua-db
+        template:
+          metadata:
+            labels:
+              app: aqua-db
+            name: aqua-db
+          spec:
+            serviceAccount: ${SERVICE_ACCOUNT}
+            restartPolicy: Always
+            imagePullSecrets:
+              - name: aqua-registry
+            containers:
+            - name: aqua-db
+              image: ${AQUA_REGISTRY}/database:${AQUA_TAG}
+              securityContext:
+                privileged: true
+              env:
+                - name: postgres-password
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: postgres-password
+              ports:
+                - containerPort: 5432
+                  protocol: TCP
+              readinessProbe:
+                failureThreshold: 3
+                initialDelaySeconds: 10
+                periodSeconds: 20
+                successThreshold: 1
+                tcpSocket:
+                  port: 5432
+                timeoutSeconds: 1
+    -
+      apiVersion: v1
+      kind: Route
+      metadata:
         name: aqua-web
-      tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Allow
-  -
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: aqua-web
-      labels:
-        app: aqua-web
-    spec:
-      ports:
-        - port: 8080
-          protocol: TCP
-          targetPort: 8080
+      spec:
+        host: ${ROUTER}
+        to:
+          kind: Service
           name: aqua-web
-      selector:
-        app: aqua-web
-      type: ClusterIP
-  -
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: aqua-web-ssl-grpc
-      labels:
-        app: aqua-web
-    spec:
-      ports:
-        - port: 443
-          protocol: TCP
-          targetPort: 8443
-          name: aqua-web-ssl-grpc
-      selector:
-        app: aqua-web
-      type: ClusterIP
-  -
-    apiVersion: extensions/v1beta1
-    kind: Deployment
-    metadata:
-      name: aqua-web
-    spec:
-      template:
-        metadata:
-          labels:
-            app: aqua-web
-          name: aqua-web
-        spec:
-          serviceAccount: ${SERVICE_ACCOUNT}
-          imagePullSecrets:
-            - name: aqua-registry
-          containers:
+        port:
+          targetPort: aqua-web
+        tls:
+          termination: edge
+          insecureEdgeTerminationPolicy: Allow
+    -
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: aqua-web
+        labels:
+          app: aqua-web
+      spec:
+        ports:
+          - name: aqua-web-ssl
+            port: 443
+            protocol: TCP
+            targetPort: 8443
           - name: aqua-web
-            image: ${AQUA_REGISTRY}/console:${AQUA_TAG}
-            securityContext:
-              privileged: true
-            env:
-              - name: SCALOCK_DBUSER
-                value: "postgres"
-              - name: SCALOCK_DBPASSWORD
-                valueFrom:
-                  secretKeyRef:
-                    key: password
-                    name: postgres-password
-              - name: SCALOCK_DBNAME
-                value: "scalock"
-              - name: SCALOCK_DBHOST
-                value: aqua-db
-              - name: SCALOCK_DBPORT
-                value: "5432"
-              - name: SCALOCK_AUDIT_DBUSER
-                value: "postgres"
-              - name: SCALOCK_AUDIT_DBPASSWORD
-                valueFrom:
-                  secretKeyRef:
-                    key: password
-                    name: postgres-password
-              - name: SCALOCK_AUDIT_DBNAME
-                value: "slk_audit"
-              - name: SCALOCK_AUDIT_DBHOST
-                value: aqua-db
-              - name: SCALOCK_AUDIT_DBPORT
-                value: "5432"
-              - name: AQUA_DOCKERLESS_SCANNING
-                value: "${DOCKERLESS}"
-              - name: "AQUA_GRPC_MODE"
-                value: "${GRPC}"
-            volumeMounts:
-              - mountPath: /var/run/docker.sock
-                name: docker-socket-mount
-            readinessProbe:
-              failureThreshold: 3
-              httpGet:
-                path: /
-                port: 8080
-                scheme: HTTP
-              periodSeconds: 30
-              successThreshold: 1
-              timeoutSeconds: 1
-          volumes:
-            - name: docker-socket-mount
-              hostPath:
-                path: /var/run/docker.sock
-parameters: 
-  - description: "Current Namespace (needed for rolebinding)"
-    displayName: NAMESPACE
-    name: NAMESPACE
-    required: true
-    value: "aqua-security"
-  -
-    description: "Enter the database password for Aqua Security"
-    displayName: DB_PASSWORD
-    name: DB_PASSWORD
-    required: true
-    value: "password"
-  -
-    description: "Enter the registry for the Aqua images."
-    displayName: AQUA_REGISTRY
-    name: AQUA_REGISTRY
-    required: true
-    value: "PROVIDE_AQUA_REGISTRY"
-  -
-    description: "Enter the image tag for the Aqua images."
-    displayName: AQUA_TAG
-    name: AQUA_TAG
-    required: true
-    value: "4.6"
-  - 
-    description: "Enter the service account"
-    displayName: SERVICE_ACCOUNT
-    name: SERVICE_ACCOUNT
-    required: true
-    value: "aqua"
-  -
-    description: "Specify the fully qualified domain name or ip address of the OpenShift node that hosts the OpenShift router."
-    displayName: ROUTER
-    name: ROUTER
-    required: false
-    value: 
-  -
-    description: "Dockerless Scanning (1 is enabled)"
-    displayName: DOCKERLESS_SCANNING
-    name: DOCKERLESS
-    required: true
-    value: "1"
-  -
-    description: "Gateway communication uses GRPC (1 is enabled)"
-    displayName: AQUA_GRPC_MODE
-    name: GRPC
-    required: true
-    value: "1"
+            port: 8080
+            protocol: TCP
+            targetPort: 8080
+        selector:
+          app: aqua-web
+        type: ClusterIP
+    -
+      apiVersion: extensions/v1beta1
+      kind: Deployment
+      metadata:
+        name: aqua-web
+        labels:
+          app: aqua-web
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: aqua-web
+        template:
+          metadata:
+            labels:
+              app: aqua-web
+            name: aqua-web
+          spec:
+            serviceAccount: ${SERVICE_ACCOUNT}
+            restartPolicy: Always
+            imagePullSecrets:
+              - name: aqua-registry
+            containers:
+            - name: aqua-web
+              image: ${AQUA_REGISTRY}/console:${AQUA_TAG}
+              securityContext:
+                privileged: true
+              env:
+                - name: SCALOCK_DBUSER
+                  value: "postgres"
+                - name: SCALOCK_DBPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: postgres-password
+                - name: SCALOCK_DBNAME
+                  value: "scalock"
+                - name: SCALOCK_DBHOST
+                  value: aqua-db
+                - name: SCALOCK_DBPORT
+                  value: "5432"
+                - name: SCALOCK_AUDIT_DBUSER
+                  value: "postgres"
+                - name: SCALOCK_AUDIT_DBPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: postgres-password
+                - name: SCALOCK_AUDIT_DBNAME
+                  value: "slk_audit"
+                - name: SCALOCK_AUDIT_DBHOST
+                  value: aqua-db
+                - name: SCALOCK_AUDIT_DBPORT
+                  value: "5432"
+                - name: LICENSE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      key: license
+                      name: aqua-license
+                - name: ADMIN_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: aqua-admin-password
+                - name: AQUA_DOCKERLESS_SCANNING
+                  value: "${DOCKERLESS}"
+                - name: "AQUA_GRPC_MODE"
+                  value: "${GRPC}"
+              ports:
+                - containerPort: 8080
+                  protocol: TCP
+                - containerPort: 8443
+                  protocol: TCP
+              volumeMounts:
+                - mountPath: /var/run/docker.sock
+                  name: docker-socket-mount
+              readinessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /
+                  port: 8080
+                  scheme: HTTP
+                periodSeconds: 30
+                successThreshold: 1
+                timeoutSeconds: 1
+            volumes:
+              - name: docker-socket-mount
+                hostPath:
+                  path: /var/run/docker.sock
+  parameters: 
+    - description: "Current Namespace (needed for rolebinding)"
+      displayName: NAMESPACE
+      name: NAMESPACE
+      required: true
+      value: "aqua"
+    -
+      description: "Enter the database password for Aqua Security"
+      displayName: DB_PASSWORD
+      name: DB_PASSWORD
+      required: true
+      value: "password"
+    -
+      description: "Enter the registry for the Aqua images."
+      displayName: AQUA_REGISTRY
+      name: AQUA_REGISTRY
+      required: true
+      value: "registry.aquasec.com"
+    -
+      description: "Enter the Aqua license."
+      displayName: AQUA_LICENSE
+      name: AQUA_LICENSE
+      required: true
+      value: "PROVIDE_AQUA_LICENSE"
+    -
+      description: "Enter the Aqua Admin password. Admin password can be changen in the Aqua UI at any time"
+      displayName: AQUA_ADMIN_PASSWORD
+      name: AQUA_ADMIN_PASSWORD
+      required: true
+      value: "PROVIDE_AQUA_ADMIN_PASSWORD"
+    -
+      description: "Enter the image tag for the Aqua images."
+      displayName: AQUA_TAG
+      name: AQUA_TAG
+      required: true
+      value: "4.6"
+    - 
+      description: "Enter the service account"
+      displayName: SERVICE_ACCOUNT
+      name: SERVICE_ACCOUNT
+      required: true
+      value: "aqua-sa"
+    -
+      description: "Specify the fully qualified domain name or ip address of the OpenShift node that hosts the OpenShift router."
+      displayName: ROUTER
+      name: ROUTER
+      required: false
+      value: 
+    -
+      description: "Dockerless Scanning (1 is enabled)"
+      displayName: DOCKERLESS_SCANNING
+      name: DOCKERLESS
+      required: true
+      value: "1"
+    -
+      description: "Gateway communication uses GRPC (1 is enabled)"
+      displayName: AQUA_GRPC_MODE
+      name: GRPC
+      required: true
+      value: "1"
