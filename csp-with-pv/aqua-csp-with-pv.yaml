@@ -51,12 +51,24 @@
       metadata:
         name: aquadb-pvc
       spec:
-        storageClassName: ${SERVICE_PVC_STORAGECLASS}
+        storageClassName: ${SERVICE_DB_PVC_STORAGECLASS}
         accessModes:
-          - ${SERVICE_PVC_STORAGEACCESS}
+          - ${SERVICE_DB_PVC_STORAGEACCESS}
         resources:
           requests:
-            storage: ${SERVICE_PVC_STORAGESIZE}
+            storage: ${SERVICE_DB_PVC_STORAGESIZE}
+    -
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: aqua-web-pvc
+      spec:
+        storageClassName: ${SERVICE_WEB_PVC_STORAGECLASS}
+        accessModes:
+          - ${SERVICE_WEB_PVC_STORAGEACCESS}
+        resources:
+          requests:
+            storage: ${SERVICE_WEB_PVC_STORAGESIZE}
     -
       apiVersion: v1
       kind: Service
@@ -205,7 +217,7 @@
               - name: aquadb-data-mount
                 persistentVolumeClaim:
                   claimName: aquadb-pvc
-              readinessProbe:
+            readinessProbe:
                 failureThreshold: 3
                 initialDelaySeconds: 10
                 periodSeconds: 20
@@ -322,6 +334,8 @@
                 - containerPort: 8443
                   protocol: TCP
               volumeMounts:
+                - mountPath: /opt/aquasec/raw-scan-results
+                  name: aqua-web-pvc
                 - mountPath: /var/run/docker.sock
                   name: docker-socket-mount
               readinessProbe:
@@ -337,6 +351,9 @@
               - name: docker-socket-mount
                 hostPath:
                   path: /var/run/docker.sock
+              - name: aqua-web-pvc
+                persistentVolumeClaim:
+                  claimName: aqua-web-pvc
   parameters: 
     - description: "Current Namespace (needed for rolebinding)."
       displayName: NAMESPACE
@@ -369,23 +386,41 @@
       required: true
       value: "aqua-sa"
     - 
-      description: "Enter the storageClassName type for PVC, e.g. gp2 for AWS EBS."
-      displayName: SERVICE_PVC_STORAGECLASS
-      name: SERVICE_PVC_STORAGECLASS
+      description: "Enter the storageClassName type for DB PVC, e.g. gp2 for AWS EBS."
+      displayName: SERVICE_DB_PVC_STORAGECLASS
+      name: SERVICE_DB_PVC_STORAGECLASS
       required: true
       value: "gp2"
     - 
-      description: "Enter the storage access modes for PVC."
-      displayName: SERVICE_PVC_STORAGEACCESS
-      name: SERVICE_PVC_STORAGEACCESS
+      description: "Enter the storage access modes for DB PVC."
+      displayName: SERVICE_DB_PVC_STORAGEACCESS
+      name: SERVICE_DB_PVC_STORAGEACCESS
       required: true
       value: "ReadWriteOnce"
     - 
-      description: "Enter the storage size for PVC."
-      displayName: SERVICE_PVC_STORAGESIZE
-      name: SERVICE_PVC_STORAGESIZE
+      description: "Enter the storage size for DB PVC."
+      displayName: SERVICE_DB_PVC_STORAGESIZE
+      name: SERVICE_DB_PVC_STORAGESIZE
       required: true
       value: "30Gi"
+    - 
+      description: "Enter the storageClassName type for Web PVC, e.g. gp2 for AWS EBS."
+      displayName: SERVICE_WEB_PVC_STORAGECLASS
+      name: SERVICE_WEB_PVC_STORAGECLASS
+      required: true
+      value: "gp2"
+    - 
+      description: "Enter the storage access modes for Web PVC."
+      displayName: SERVICE_WEB_PVC_STORAGEACCESS
+      name: SERVICE_WEB_PVC_STORAGEACCESS
+      required: true
+      value: "ReadWriteOnce"
+    - 
+      description: "Enter the storage size for Web PVC."
+      displayName: SERVICE_WEB_PVC_STORAGESIZE
+      name: SERVICE_WEB_PVC_STORAGESIZE
+      required: true
+      value: "4Gi"
     -
       description: "Enter the Aqua license."
       displayName: AQUA_LICENSE
@@ -399,7 +434,7 @@
       required: true
       value: "PROVIDE_AQUA_ADMIN_PASSWORD"
     -
-      description: "Specify the fully qualified domain name or ip address of the OpenShift node that hosts the OpenShift router."
+      description: "Specify the fully qualified domain name or ip address of the OpenShift node that hosts the OpenShift router. If not defined, a fully qualified domain name is generated."
       displayName: ROUTER
       name: ROUTER
       required: false
